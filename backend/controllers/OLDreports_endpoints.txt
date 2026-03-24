@@ -1,0 +1,252 @@
+// controllers/reports_endpoints.go
+package controllers
+
+import (
+    "context"
+    "net/http"
+    "time"
+    "fmt"
+
+    "github.com/gin-gonic/gin"
+    "github.com/jackc/pgx/v5/pgxpool"
+)
+
+// GetServiceRevenueReport returns JSON data for the revenue table
+func GetServiceRevenueReport(pool *pgxpool.Pool) gin.HandlerFunc {
+    return func(c *gin.Context) {
+        from := c.Query("from")
+        to := c.Query("to")
+
+        rows, err := pool.Query(context.Background(), `
+            SELECT day, total_charge_count, new_optins_revenue, renewal_revenue, total_revenue
+            FROM mv_daily_revenue
+            WHERE day BETWEEN $1 AND $2
+            ORDER BY day DESC
+        `, from, to)
+        if err != nil {
+            c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+            return
+        }
+        defer rows.Close()
+
+        var results []map[string]interface{}
+        for rows.Next() {
+            var day time.Time
+            var totalCharge, newRevenue, renewalRevenue, totalRevenue float64
+            if err := rows.Scan(&day, &totalCharge, &newRevenue, &renewalRevenue, &totalRevenue); err != nil {
+                c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+                return
+            }
+            results = append(results, gin.H{
+                "Time":             day.Format("2006-01-02"),
+                "TotalChargeCount": totalCharge,
+                "NewOptInsRevenue": newRevenue,
+                "RenewalRevenue":   renewalRevenue,
+                "TotalRevenue":     totalRevenue,
+            })
+        }
+        c.JSON(http.StatusOK, results)
+    }
+}
+
+// ExportServiceRevenueCSV returns CSV for download
+func ExportServiceRevenueCSV(pool *pgxpool.Pool) gin.HandlerFunc {
+    return func(c *gin.Context) {
+        from := c.Query("from")
+        to := c.Query("to")
+
+        rows, err := pool.Query(context.Background(), `
+            SELECT day, total_charge_count, new_optins_revenue, renewal_revenue, total_revenue
+            FROM mv_daily_revenue
+            WHERE day BETWEEN $1 AND $2
+            ORDER BY day DESC
+        `, from, to)
+        if err != nil {
+            c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+            return
+        }
+        defer rows.Close()
+
+        csv := "Time,TotalChargeCount,NewOptInsRevenue,RenewalRevenue,TotalRevenue\n"
+        for rows.Next() {
+            var day time.Time
+            var totalCharge, newRevenue, renewalRevenue, totalRevenue float64
+            if err := rows.Scan(&day, &totalCharge, &newRevenue, &renewalRevenue, &totalRevenue); err != nil {
+                c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+                return
+            }
+            csv += fmt.Sprintf("%s,%.0f,%.2f,%.2f,%.2f\n",
+                day.Format("2006-01-02"), totalCharge, newRevenue, renewalRevenue, totalRevenue)
+        }
+
+        c.Header("Content-Type", "text/csv")
+        c.Header("Content-Disposition", "attachment; filename=service_revenue.csv")
+        c.String(http.StatusOK, csv)
+    }
+}
+
+func GetServiceSubscriptionReport(pool *pgxpool.Pool) gin.HandlerFunc {
+    return func(c *gin.Context) {
+        from := c.Query("from")
+        to := c.Query("to")
+
+        rows, err := pool.Query(context.Background(), `
+            SELECT day, free_trial, newly_added_count, total_unsubscribed_count, total_renewal_count
+            FROM mv_daily_subscriptions
+            WHERE day BETWEEN $1 AND $2
+            ORDER BY day DESC
+        `, from, to)
+        if err != nil {
+            c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+            return
+        }
+        defer rows.Close()
+
+        var results []map[string]interface{}
+        for rows.Next() {
+            var day time.Time
+            var freeTrial, newAdded, unsubscribed, renewal int
+            if err := rows.Scan(&day, &freeTrial, &newAdded, &unsubscribed, &renewal); err != nil {
+                c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+                return
+            }
+            results = append(results, gin.H{
+                "Time":                  day.Format("2006-01-02"),
+                "FreeTrial":             freeTrial,
+                "NewlyAddedCount":       newAdded,
+                "TotalUnsubscribedCount": unsubscribed,
+                "TotalRenewalCount":     renewal,
+            })
+        }
+        c.JSON(http.StatusOK, results)
+    }
+}
+
+func ExportServiceSubscriptionCSV(pool *pgxpool.Pool) gin.HandlerFunc {
+    return func(c *gin.Context) {
+        from := c.Query("from")
+        to := c.Query("to")
+
+        rows, err := pool.Query(context.Background(), `
+            SELECT day, free_trial, newly_added_count, total_unsubscribed_count, total_renewal_count
+            FROM mv_daily_subscriptions
+            WHERE day BETWEEN $1 AND $2
+            ORDER BY day DESC
+        `, from, to)
+        if err != nil {
+            c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+            return
+        }
+        defer rows.Close()
+
+        csv := "Time,FreeTrial,NewlyAddedCount,TotalUnsubscribedCount,TotalRenewalCount\n"
+        for rows.Next() {
+            var day time.Time
+            var freeTrial, newAdded, unsubscribed, renewal int
+            if err := rows.Scan(&day, &freeTrial, &newAdded, &unsubscribed, &renewal); err != nil {
+                c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+                return
+            }
+            csv += fmt.Sprintf("%s,%d,%d,%d,%d\n",
+                day.Format("2006-01-02"), freeTrial, newAdded, unsubscribed, renewal)
+        }
+
+        c.Header("Content-Type", "text/csv")
+        c.Header("Content-Disposition", "attachment; filename=service_subscription.csv")
+        c.String(http.StatusOK, csv)
+    }
+}
+
+func GetOperationLogReport(pool *pgxpool.Pool) gin.HandlerFunc {
+    return func(c *gin.Context) {
+        from := c.Query("from")
+        to := c.Query("to")
+        msisdn := c.Query("msisdn")
+        serviceId := c.Query("serviceId")
+        productId := c.Query("productId")
+        sequenceNo := c.Query("sequenceNo")
+
+        rows, err := pool.Query(context.Background(), `
+            SELECT time, msisdn, service_id, product_id, sequence_no, status, callback_type, message
+            FROM ddm_callbacks
+            WHERE time BETWEEN $1 AND $2
+              AND ($3 = '' OR msisdn = $3)
+              AND ($4 = '' OR service_id = $4)
+              AND ($5 = '' OR product_id = $5)
+              AND ($6 = '' OR sequence_no = $6)
+            ORDER BY time DESC
+        `, from, to, msisdn, serviceId, productId, sequenceNo)
+        if err != nil {
+            c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+            return
+        }
+        defer rows.Close()
+
+        var results []map[string]interface{}
+        for rows.Next() {
+            var t time.Time
+            var msisdnVal, serviceIdVal, productIdVal, sequenceNoVal, status, callbackType, message string
+            if err := rows.Scan(&t, &msisdnVal, &serviceIdVal, &productIdVal, &sequenceNoVal, &status, &callbackType, &message); err != nil {
+                c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+                return
+            }
+            results = append(results, gin.H{
+                "Time":         t.Format("2006-01-02 15:04:05"),
+                "MSISDN":       msisdnVal,
+                "ServiceId":    serviceIdVal,
+                "ProductId":    productIdVal,
+                "SequenceNo":   sequenceNoVal,
+                "Status":       status,
+                "CallbackType": callbackType,
+                "Message":      message,
+            })
+        }
+        c.JSON(http.StatusOK, results)
+    }
+}
+
+func ExportOperationLogCSV(pool *pgxpool.Pool) gin.HandlerFunc {
+    return func(c *gin.Context) {
+        from := c.Query("from")
+        to := c.Query("to")
+        msisdn := c.Query("msisdn")
+        serviceId := c.Query("serviceId")
+        productId := c.Query("productId")
+        sequenceNo := c.Query("sequenceNo")
+
+        rows, err := pool.Query(context.Background(), `
+            SELECT time, msisdn, service_id, product_id, sequence_no, status, callback_type, message
+            FROM ddm_callbacks
+            WHERE time BETWEEN $1 AND $2
+              AND ($3 = '' OR msisdn = $3)
+              AND ($4 = '' OR service_id = $4)
+              AND ($5 = '' OR product_id = $5)
+              AND ($6 = '' OR sequence_no = $6)
+            ORDER BY time DESC
+        `, from, to, msisdn, serviceId, productId, sequenceNo)
+        if err != nil {
+            c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+            return
+        }
+        defer rows.Close()
+
+        csv := "Time,MSISDN,ServiceId,ProductId,SequenceNo,Status,CallbackType,Message\n"
+        for rows.Next() {
+            var t time.Time
+            var msisdnVal, serviceIdVal, productIdVal, sequenceNoVal, status, callbackType, message string
+            if err := rows.Scan(&t, &msisdnVal, &serviceIdVal, &productIdVal, &sequenceNoVal, &status, &callbackType, &message); err != nil {
+                c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+                return
+            }
+            csv += fmt.Sprintf("%s,%s,%s,%s,%s,%s,%s,%s\n",
+                t.Format("2006-01-02 15:04:05"),
+                msisdnVal, serviceIdVal, productIdVal, sequenceNoVal,
+                status, callbackType, message)
+        }
+
+        c.Header("Content-Type", "text/csv")
+        c.Header("Content-Disposition", "attachment; filename=operation_log.csv")
+        c.String(http.StatusOK, csv)
+    }
+}
+

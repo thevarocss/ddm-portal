@@ -1,0 +1,31 @@
+// cmd/main.go
+package main
+
+import (
+  "ddm/controllers"
+  "ddm/middleware"
+  "ddm/services"
+  "github.com/gin-gonic/gin"
+)
+
+func main() {
+  db := services.MustConnectDB() // pgx connection
+  r := gin.Default()
+
+  r.POST("/api/auth/login", controllers.LoginHandler(db))
+  r.POST("/api/auth/register", controllers.RegisterHandler(db)) // later protect with admin role
+
+  api := r.Group("/api")
+  api.Use(middleware.JWTAuth())
+
+  api.GET("/dashboard", controllers.DashboardHandler(db))
+
+  reports := api.Group("/reports")
+  reports.Use(middleware.RequireRoles("admin","analyst"))
+  reports.GET("/subscriptions", controllers.SubscriptionReportHandler(db))
+  reports.GET("/revenue", controllers.RevenueReportHandler(db))
+  reports.GET("/callbacks", controllers.CallbackReportHandler(db))
+  reports.GET("/unsubscriptions", controllers.UnsubscriptionReportHandler(db))
+
+  r.Run(":8080")
+}
