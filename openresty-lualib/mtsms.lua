@@ -6,12 +6,12 @@ local cjson = require "cjson"
 
 local M = {}
 
--- CONFIG: fill these with your SMS account/service settings
-local SMS_URL        = "http://41.76.198.1:6211/app/json/sms/sendSmsRequest"
-local SP_ID          = "thevardsms"
-local SP_SECRET      = "7vW4w8s6Y1rk"   -- password used in MD5(spId + password + timeStamp)
-local SERVICE_CODE   = "3003"           -- your assigned service code
-local DEFAULT_NETWORK= "MTN"            -- or set to any valid value required by API
+-- CONFIG: Load from environment variables (no hardcoded secrets)
+local SMS_URL        = os.getenv("MTSMS_URL") or error("MTSMS_URL environment variable not set")
+local SP_ID          = os.getenv("MTSMS_SP_ID") or error("MTSMS_SP_ID environment variable not set")
+local SP_SECRET      = os.getenv("MTSMS_PASSWORD") or error("MTSMS_PASSWORD environment variable not set")
+local SERVICE_CODE   = os.getenv("MTSMS_SERVICE_CODE") or "3003"
+local DEFAULT_NETWORK= os.getenv("MTSMS_NETWORK") or "MTN"
 
 -- Environment detection
 local has_ngx = (type(ngx) == "table")
