@@ -1,0 +1,56 @@
+# Node
+node_modules/
+frontend/node_modules/
+frontend/build/
+
+# Go
+bin/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+vendor/
+
+# Python
+__pycache__/
+*.pyc
+
+# local env files
+.env
+.env.local
+.env.*.local
+
+# logs/temp
+*.log
+nohup.out
+
+# dumps/archives
+*.tar
+*.tgz
+*.zip
+
+# OS
+.DS_Store
+Thumbs.db
+
+# FreeSWITCH/OpenResty generated
+/var/lib/freeswitch/recordings/
+/var/log/freeswitch/
+
+# Environment files
+.env
+.env.local
+.env.production
+.env.staging
+
+# Secrets
+config/secrets.json
+*.key
+*.pem
+deploy/keys/
+
+# Logs that might contain secrets
+*.log
